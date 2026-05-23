@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Models } from "appwrite";
-import { databases, ID, Query } from "../lib/appwrite";
+import { ID, Query, type Models } from "appwrite";
+import { databases } from "../lib/appwrite";
 
 type EventType = {
   $id: string;
@@ -37,9 +37,21 @@ const DATABASE_ID = "main";
 const DAYS_COLLECTION_ID = "days";
 const EVENTS_COLLECTION_ID = "events";
 
+const inputStyle = {
+  width: "100%",
+  minWidth: 0,
+  background: "transparent",
+  border: "none",
+  color: "white",
+  fontWeight: 800,
+  outline: "none",
+};
+
 export default function Page() {
   const [days, setDays] = useState<DayType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
 
   const [dragged, setDragged] = useState<{ event: EventType; dayId: string } | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
@@ -79,8 +91,10 @@ export default function Page() {
       }));
 
       setDays(formatted);
+      setLoadError("");
     } catch (err) {
       console.error(err);
+      setLoadError("Не получилось загрузить даты из базы. Проверьте Appwrite: проект, базу main и коллекции days/events.");
     } finally {
       setLoading(false);
     }
@@ -93,6 +107,20 @@ export default function Page() {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  async function addDay() {
+    const value = prompt("Введите дату:");
+    if (!value) return;
+
+    const day = await databases.createDocument<DayDocument>(DATABASE_ID, DAYS_COLLECTION_ID, ID.unique(), {
+      date: value,
+      first_team_name: "Я Воробушки",
+      second_team_name: "Лев и новенькие",
+    });
+
+    await loadData();
+    setSelectedDayId(day.$id);
+  }
 
   function startDayEdit(dayId: string, field: "date" | "firstTeamName" | "secondTeamName", currentValue: string) {
     setEditingDayId(dayId);
@@ -168,59 +196,150 @@ export default function Page() {
     await loadData();
   }
 
+  function renderEvent(event: EventType, dayId: string) {
+    return (
+      <div key={event.$id} style={{ marginBottom: 16 }}>
+        <div
+          draggable
+          onDragStart={() => setDragged({ event, dayId })}
+          onClick={() => startEdit(event)}
+          style={{ padding: "18px 20px", border: "1px solid #e0e7ff", borderRadius: 16, background: "#fff", boxShadow: "0 4px 15px rgba(0,0,0,0.06)", cursor: "grab" }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>{event.time}</div>
+              <div style={{ fontSize: 18, fontWeight: 600, overflowWrap: "anywhere" }}>{event.title}</div>
+              {event.place && <div style={{ fontSize: 15, color: "#475569", marginTop: 8 }}>📍 {event.place}</div>}
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={(e) => { e.stopPropagation(); quickRoad(event); }} style={{ fontSize: 22 }}>🚗</button>
+              <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.$id); }} style={{ fontSize: 22 }}>🗑</button>
+            </div>
+          </div>
+        </div>
+
+        {event.road && <div style={{ marginLeft: 24, marginTop: 8, color: "#f59e0b", fontWeight: 600 }}>→ {event.road}</div>}
+      </div>
+    );
+  }
+
+  function renderColumn(day: DayType, team: "first" | "second") {
+    const items = day.boards[team];
+    const teamName = team === "first" ? day.firstTeamName : day.secondTeamName;
+    const teamField = team === "first" ? "firstTeamName" : "secondTeamName";
+
+    return (
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => onDrop(day.$id, team)}
+        style={{ minWidth: 0, background: "#fff", borderRadius: 20, padding: 18, border: "1px solid #e2e8f0", boxShadow: "0 10px 30px rgba(0,0,0,0.06)" }}
+      >
+        <div onClick={() => startDayEdit(day.$id, teamField, teamName)} style={{ fontSize: "clamp(18px, 5vw, 22px)", fontWeight: 700, padding: "12px 18px", background: "#1e2937", color: "white", borderRadius: 14, marginBottom: 24, cursor: "pointer", overflowWrap: "anywhere" }}>
+          {editingDayId === day.$id && editingField === teamField ? (
+            <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ ...inputStyle, fontSize: "clamp(18px, 5vw, 22px)" }} />
+          ) : (
+            teamName
+          )}
+        </div>
+
+        <button onClick={() => addEvent(day.$id, team)} style={{ float: "right", fontSize: 24 }}>➕</button>
+
+        <div style={{ clear: "both" }}>
+          {items.map((event) => renderEvent(event, day.$id))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderStartPage() {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, Arial, sans-serif", padding: "32px 16px" }}>
+        <div style={{ maxWidth: 980, margin: "0 auto" }}>
+          <h1 style={{ fontSize: 32, fontWeight: 800, color: "#1e2937", textAlign: "center", marginBottom: 34 }}>🎭 Dance Ops</h1>
+
+          {loadError && (
+            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 16, color: "#9a3412", fontSize: 16, fontWeight: 600, lineHeight: 1.5, marginBottom: 18, padding: 16, textAlign: "center" }}>
+              {loadError}
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 16 }}>
+            {days.map((day) => (
+              <button
+                key={day.$id}
+                onClick={() => setSelectedDayId(day.$id)}
+                style={{ minHeight: 130, padding: 18, border: "1px solid #e2e8f0", borderRadius: 18, background: "#ffffff", color: "#1e2937", boxShadow: "0 10px 30px rgba(0,0,0,0.06)", fontSize: 24, fontWeight: 800, cursor: "pointer", textAlign: "center", overflowWrap: "anywhere" }}
+              >
+                {day.date}
+              </button>
+            ))}
+
+            <button
+              onClick={addDay}
+              style={{ minHeight: 130, padding: 18, border: "2px dashed #94a3b8", borderRadius: 18, background: "#ffffff", color: "#475569", boxShadow: "0 10px 30px rgba(0,0,0,0.04)", fontSize: 46, fontWeight: 500, cursor: "pointer" }}
+              aria-label="Добавить дату"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) return <div style={{ padding: 50, textAlign: "center", fontSize: 18 }}>Загрузка...</div>;
+
+  const selectedDay = days.find((day) => day.$id === selectedDayId);
+
+  if (!selectedDay) return renderStartPage();
 
   return (
     <div style={{ padding: "20px 12px", background: "#f8fafc", minHeight: "100vh", overflowX: "hidden", fontFamily: "system-ui, Arial, sans-serif" }}>
-      <h1 style={{ textAlign: "center", fontSize: "clamp(26px, 8vw, 32px)", marginBottom: 40 }}>🎭 Dance Ops</h1>
+      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 32 }}>
+          <button onClick={() => setSelectedDayId(null)} style={{ padding: "12px 18px", background: "#ffffff", color: "#1e2937", border: "1px solid #e2e8f0", borderRadius: 14, fontSize: 18, fontWeight: 700, cursor: "pointer" }}>
+            ← Даты
+          </button>
 
-      {days.map((day) => (
-        <div key={day.$id} style={{ marginBottom: 60 }}>
-          <div onClick={() => startDayEdit(day.$id, "date", day.date)} style={{ display: "inline-block", maxWidth: "100%", boxSizing: "border-box", background: "#1e2937", color: "white", borderRadius: 18, padding: "14px 24px", fontSize: "clamp(24px, 8vw, 32px)", fontWeight: 800, marginBottom: 24, cursor: "pointer" }}>
-            {editingDayId === day.$id && editingField === "date" ? (
-              <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: "white", fontSize: "clamp(24px, 8vw, 32px)", fontWeight: 800 }} />
+          <h1 style={{ fontSize: "clamp(26px, 8vw, 32px)", fontWeight: 800, color: "#1e2937", textAlign: "center", margin: 0 }}>🎭 Dance Ops</h1>
+
+          <div style={{ width: 94 }} />
+        </div>
+
+        <div style={{ marginBottom: 60 }}>
+          <div onClick={() => startDayEdit(selectedDay.$id, "date", selectedDay.date)} style={{ display: "inline-block", maxWidth: "100%", boxSizing: "border-box", background: "#1e2937", color: "white", borderRadius: 18, padding: "14px 24px", fontSize: "clamp(24px, 8vw, 32px)", fontWeight: 800, marginBottom: 24, cursor: "pointer" }}>
+            {editingDayId === selectedDay.$id && editingField === "date" ? (
+              <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ ...inputStyle, fontSize: "clamp(24px, 8vw, 32px)" }} />
             ) : (
-              day.date
+              selectedDay.date
             )}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))", gap: 24 }}>
-            {["first", "second"].map((t) => {
-              const team = t as "first" | "second";
-              const items = day.boards[team];
-              const teamName = team === "first" ? day.firstTeamName : day.secondTeamName;
-              const teamField = team === "first" ? "firstTeamName" : "secondTeamName";
-
-              return (
-                <div key={team} style={{ minWidth: 0, background: "#fff", borderRadius: 20, padding: 18, border: "1px solid #e2e8f0", boxShadow: "0 10px 30px rgba(0,0,0,0.06)" }}>
-                  <div onClick={() => startDayEdit(day.$id, teamField, teamName)} style={{ fontSize: "clamp(18px, 5vw, 22px)", fontWeight: 700, padding: "12px 18px", background: "#1e2937", color: "white", borderRadius: 14, marginBottom: 24, cursor: "pointer", overflowWrap: "anywhere" }}>
-                    {editingDayId === day.$id && editingField === teamField ? (
-                      <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: "white", fontSize: "clamp(18px, 5vw, 22px)", fontWeight: 700 }} />
-                    ) : (
-                      teamName
-                    )}
-                  </div>
-
-                  <button onClick={() => addEvent(day.$id, team)} style={{ float: "right", fontSize: 24 }}>➕</button>
-
-                  <div style={{ clear: "both" }}>
-                    {items.map((event) => (
-                      <div key={event.$id} style={{ marginBottom: 16 }}>
-                        <div draggable onDragStart={() => setDragged({ event, dayId: day.$id })} onClick={() => startEdit(event)} style={{ padding: "18px 20px", border: "1px solid #e0e7ff", borderRadius: 16, background: "#fff", boxShadow: "0 4px 15px rgba(0,0,0,0.06)", cursor: "grab" }}>
-                          <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>{event.time}</div>
-                          <div style={{ fontSize: 18, fontWeight: 600 }}>{event.title}</div>
-                          {event.place && <div style={{ fontSize: 15, color: "#475569", marginTop: 8 }}>📍 {event.place}</div>}
-                        </div>
-                        {event.road && <div style={{ marginLeft: 24, marginTop: 8, color: "#f59e0b", fontWeight: 600 }}>→ {event.road}</div>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+            {renderColumn(selectedDay, "first")}
+            {renderColumn(selectedDay, "second")}
           </div>
         </div>
-      ))}
+      </div>
+
+      {editingEvent && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
+          <div style={{ background: "white", padding: 28, borderRadius: 20, width: "100%", maxWidth: 420 }}>
+            <h3 style={{ marginBottom: 20 }}>Редактировать выступление</h3>
+
+            <input value={editForm.title} placeholder="Название" onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} style={{ width: "100%", padding: 14, marginBottom: 12, borderRadius: 12, border: "1px solid #ddd", fontSize: 16 }} />
+            <input value={editForm.time} placeholder="Время" onChange={(e) => setEditForm({ ...editForm, time: e.target.value })} style={{ width: "100%", padding: 14, marginBottom: 12, borderRadius: 12, border: "1px solid #ddd", fontSize: 16 }} />
+            <input value={editForm.place} placeholder="Место" onChange={(e) => setEditForm({ ...editForm, place: e.target.value })} style={{ width: "100%", padding: 14, marginBottom: 12, borderRadius: 12, border: "1px solid #ddd", fontSize: 16 }} />
+            <input value={editForm.road} placeholder="Время в пути" onChange={(e) => setEditForm({ ...editForm, road: e.target.value })} style={{ width: "100%", padding: 14, marginBottom: 24, borderRadius: 12, border: "1px solid #ddd", fontSize: 16 }} />
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <button onClick={saveEdit} style={{ flex: 1, padding: 16, background: "#4f46e5", color: "white", border: "none", borderRadius: 12, fontWeight: 600 }}>Сохранить</button>
+              <button onClick={() => setEditingEvent(null)} style={{ flex: 1, padding: 16, background: "#e2e8f0", border: "none", borderRadius: 12 }}>Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
