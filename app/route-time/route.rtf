@@ -1,0 +1,42 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2821
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 import \{ NextResponse \} from "next/server";\
+\
+export async function POST(req: Request) \{\
+  try \{\
+    const \{ from, to \} = await req.json();\
+\
+    const apiKey = process.env.NEXT_PUBLIC_YANDEX_KEY;\
+\
+    const url = `https://api.routing.yandex.net/v2/route?apikey=$\{apiKey\}&waypoints=$\{encodeURIComponent(\
+      from\
+    )\}|$\{encodeURIComponent(to)\}&mode=driving`;\
+\
+    const res = await fetch(url);\
+    const data = await res.json();\
+\
+    const route = data?.routes?.[0]?.legs?.[0];\
+\
+    if (!route) \{\
+      return NextResponse.json(\
+        \{ error: "Route not found" \},\
+        \{ status: 400 \}\
+      );\
+    \}\
+\
+    return NextResponse.json(\{\
+      duration: route.duration, // \uc0\u1089 \u1077 \u1082 \u1091 \u1085 \u1076 \u1099 \
+      distance: route.distance, // \uc0\u1084 \u1077 \u1090 \u1088 \u1099 \
+    \});\
+  \} catch (error) \{\
+    return NextResponse.json(\
+      \{ error: "Routing failed", details: String(error) \},\
+      \{ status: 500 \}\
+    );\
+  \}\
+\}}
