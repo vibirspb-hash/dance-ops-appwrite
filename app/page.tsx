@@ -33,9 +33,9 @@ type DayDocument = Models.Document & {
   second_team_name?: string;
 };
 
-const DATABASE_ID = "main";
-const DAYS_COLLECTION_ID = "days";
-const EVENTS_COLLECTION_ID = "events";
+const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID ?? "main";
+const DAYS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_DAYS_COLLECTION_ID ?? "days";
+const EVENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_EVENTS_COLLECTION_ID ?? "events";
 
 const inputStyle = {
   width: "100%",
@@ -94,7 +94,8 @@ export default function Page() {
       setLoadError("");
     } catch (err) {
       console.error(err);
-      setLoadError("Не получилось загрузить даты из базы. Проверьте Appwrite: проект, базу main и коллекции days/events.");
+      const message = err instanceof Error ? err.message : "Неизвестная ошибка";
+      setLoadError(`Не получилось загрузить даты из базы: ${message}`);
     } finally {
       setLoading(false);
     }
