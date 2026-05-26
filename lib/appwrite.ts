@@ -1,10 +1,9 @@
-import { Client, Databases, ID, Query } from 'appwrite';
+import { Client, Databases, ID, Query } from "appwrite";
 
 const client = new Client()
-    .setEndpoint('https://cloud.appwrite.io/v1')
-    .setProject('6a11e51d001553538418');
+  .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ?? "https://cloud.appwrite.io/v1")
+  .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID ?? "6a11e51d001553538418");
 
 export const databases = new Databases(client);
 
-// Экспортируем нужные утилиты
 export { ID, Query };

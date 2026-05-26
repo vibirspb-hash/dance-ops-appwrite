@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Models } from "appwrite";
 import { databases, ID, Query } from "../lib/appwrite";
 
 type EventType = {
@@ -24,6 +25,18 @@ type DayType = {
   };
 };
 
+type EventDocument = Models.Document & Omit<EventType, "$id">;
+
+type DayDocument = Models.Document & {
+  date: string;
+  first_team_name?: string;
+  second_team_name?: string;
+};
+
+const DATABASE_ID = "main";
+const DAYS_COLLECTION_ID = "days";
+const EVENTS_COLLECTION_ID = "events";
+
 export default function Page() {
   const [days, setDays] = useState<DayType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,17 +53,28 @@ export default function Page() {
   async function loadData() {
     setLoading(true);
     try {
-      const daysRes = await databases.listDocuments('main', 'days', [Query.orderAsc('date')]);
-      const eventsRes = await databases.listDocuments('main', 'events');
+      const daysRes = await databases.listDocuments<DayDocument>(DATABASE_ID, DAYS_COLLECTION_ID, [
+        Query.orderAsc("date"),
+      ]);
+      const eventsRes = await databases.listDocuments<EventDocument>(DATABASE_ID, EVENTS_COLLECTION_ID);
+      const events = eventsRes.documents.map((event) => ({
+        $id: event.$id,
+        title: event.title,
+        time: event.time,
+        place: event.place,
+        road: event.road,
+        team: event.team,
+        day_id: event.day_id,
+      }));
 
-      const formatted = daysRes.documents.map((day: any) => ({
+      const formatted: DayType[] = daysRes.documents.map((day) => ({
         $id: day.$id,
         date: day.date,
         firstTeamName: day.first_team_name || "Я Воробушки",
         secondTeamName: day.second_team_name || "Лев и новенькие",
         boards: {
-          first: eventsRes.documents.filter((e: any) => e.day_id === day.$id && e.team === "first"),
-          second: eventsRes.documents.filter((e: any) => e.day_id === day.$id && e.team === "second"),
+          first: events.filter((event) => event.day_id === day.$id && event.team === "first"),
+          second: events.filter((event) => event.day_id === day.$id && event.team === "second"),
         },
       }));
 
@@ -63,7 +87,11 @@ export default function Page() {
   }
 
   useEffect(() => {
-    loadData();
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   function startDayEdit(dayId: string, field: "date" | "firstTeamName" | "secondTeamName", currentValue: string) {
@@ -75,12 +103,12 @@ export default function Page() {
   async function saveDayEdit() {
     if (!editingDayId || !editingField) return;
 
-    const updateData: any = {};
+    const updateData: Partial<Pick<DayDocument, "date" | "first_team_name" | "second_team_name">> = {};
     if (editingField === "date") updateData.date = editValue;
     if (editingField === "firstTeamName") updateData.first_team_name = editValue;
     if (editingField === "secondTeamName") updateData.second_team_name = editValue;
 
-    await databases.updateDocument('main', 'days', editingDayId, updateData);
+    await databases.updateDocument(DATABASE_ID, DAYS_COLLECTION_ID, editingDayId, updateData);
 
     setEditingDayId(null);
     setEditingField(null);
@@ -88,7 +116,7 @@ export default function Page() {
   }
 
   async function addEvent(dayId: string, team: "first" | "second") {
-    await databases.createDocument('main', 'events', ID.unique(), {
+    await databases.createDocument(DATABASE_ID, EVENTS_COLLECTION_ID, ID.unique(), {
       title: "Новое выступление",
       time: "18:00",
       place: "",
@@ -100,7 +128,7 @@ export default function Page() {
   }
 
   async function deleteEvent(id: string) {
-    await databases.deleteDocument('main', 'events', id);
+    await databases.deleteDocument(DATABASE_ID, EVENTS_COLLECTION_ID, id);
     await loadData();
   }
 
@@ -116,7 +144,7 @@ export default function Page() {
 
   async function saveEdit() {
     if (!editingEvent) return;
-    await databases.updateDocument('main', 'events', editingEvent.$id, {
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, editingEvent.$id, {
       title: editForm.title,
       time: editForm.time,
       place: editForm.place,
@@ -129,13 +157,13 @@ export default function Page() {
   async function quickRoad(event: EventType) {
     const value = prompt("Время в пути:");
     if (!value) return;
-    await databases.updateDocument('main', 'events', event.$id, { road: value });
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, event.$id, { road: value });
     await loadData();
   }
 
   async function onDrop(dayId: string, team: "first" | "second") {
     if (!dragged) return;
-    await databases.updateDocument('main', 'events', dragged.event.$id, { day_id: dayId, team });
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, dragged.event.$id, { day_id: dayId, team });
     setDragged(null);
     await loadData();
   }
@@ -143,20 +171,20 @@ export default function Page() {
   if (loading) return <div style={{ padding: 50, textAlign: "center", fontSize: 18 }}>Загрузка...</div>;
 
   return (
-    <div style={{ padding: "20px 12px", background: "#f8fafc", minHeight: "100vh", fontFamily: "system-ui, Arial, sans-serif" }}>
-      <h1 style={{ textAlign: "center", fontSize: 32, marginBottom: 40 }}>🎭 Dance Ops</h1>
+    <div style={{ padding: "20px 12px", background: "#f8fafc", minHeight: "100vh", overflowX: "hidden", fontFamily: "system-ui, Arial, sans-serif" }}>
+      <h1 style={{ textAlign: "center", fontSize: "clamp(26px, 8vw, 32px)", marginBottom: 40 }}>🎭 Dance Ops</h1>
 
       {days.map((day) => (
         <div key={day.$id} style={{ marginBottom: 60 }}>
-          <div onClick={() => startDayEdit(day.$id, "date", day.date)} style={{ display: "inline-block", background: "#1e2937", color: "white", borderRadius: 18, padding: "14px 32px", fontSize: 32, fontWeight: 800, marginBottom: 24, cursor: "pointer" }}>
+          <div onClick={() => startDayEdit(day.$id, "date", day.date)} style={{ display: "inline-block", maxWidth: "100%", boxSizing: "border-box", background: "#1e2937", color: "white", borderRadius: 18, padding: "14px 24px", fontSize: "clamp(24px, 8vw, 32px)", fontWeight: 800, marginBottom: 24, cursor: "pointer" }}>
             {editingDayId === day.$id && editingField === "date" ? (
-              <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ background: "transparent", border: "none", color: "white", fontSize: 32, fontWeight: 800 }} />
+              <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: "white", fontSize: "clamp(24px, 8vw, 32px)", fontWeight: 800 }} />
             ) : (
               day.date
             )}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))", gap: 24 }}>
             {["first", "second"].map((t) => {
               const team = t as "first" | "second";
               const items = day.boards[team];
@@ -164,10 +192,10 @@ export default function Page() {
               const teamField = team === "first" ? "firstTeamName" : "secondTeamName";
 
               return (
-                <div key={team} style={{ background: "#fff", borderRadius: 20, padding: 24, border: "1px solid #e2e8f0", boxShadow: "0 10px 30px rgba(0,0,0,0.06)" }}>
-                  <div onClick={() => startDayEdit(day.$id, teamField, teamName)} style={{ fontSize: 22, fontWeight: 700, padding: "12px 24px", background: "#1e2937", color: "white", borderRadius: 14, marginBottom: 24, cursor: "pointer" }}>
+                <div key={team} style={{ minWidth: 0, background: "#fff", borderRadius: 20, padding: 18, border: "1px solid #e2e8f0", boxShadow: "0 10px 30px rgba(0,0,0,0.06)" }}>
+                  <div onClick={() => startDayEdit(day.$id, teamField, teamName)} style={{ fontSize: "clamp(18px, 5vw, 22px)", fontWeight: 700, padding: "12px 18px", background: "#1e2937", color: "white", borderRadius: 14, marginBottom: 24, cursor: "pointer", overflowWrap: "anywhere" }}>
                     {editingDayId === day.$id && editingField === teamField ? (
-                      <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ background: "transparent", border: "none", color: "white", fontSize: 22, fontWeight: 700 }} />
+                      <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: "white", fontSize: "clamp(18px, 5vw, 22px)", fontWeight: 700 }} />
                     ) : (
                       teamName
                     )}
