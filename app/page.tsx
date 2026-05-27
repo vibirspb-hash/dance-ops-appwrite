@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { databases, ID, Query } from "../lib/appwrite";
+import { ID, Query, type Models } from "appwrite";
+import { databases } from "../lib/appwrite";
 
 type EventType = {
   $id: string;
@@ -24,14 +25,22 @@ type DayType = {
   };
 };
 
+type EventDocument = Models.Document & Omit<EventType, "$id">;
+type DayDocument = Models.Document & {
+  date: string;
+  first_team_name?: string;
+  second_team_name?: string;
+};
+
+const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID ?? "main";
+const DAYS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_DAYS_COLLECTION_ID ?? "days";
+const EVENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_EVENTS_COLLECTION_ID ?? "events";
+
 export default function Page() {
   const [days, setDays] = useState<DayType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-  const [isClient, setIsClient] = useState(false);
-
-  // 🔐 AUTH
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [password, setPassword] = useState("");
 
   const [dragged, setDragged] = useState<{ event: EventType; dayId: string } | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
@@ -42,54 +51,58 @@ export default function Page() {
 
   const [editForm, setEditForm] = useState({ title: "", time: "", place: "", road: "" });
 
-  useEffect(() => {
-    setIsClient(true);
-    const saved = localStorage.getItem("dance_auth");
-    if (saved === "true") setIsAuthed(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isClient || !isAuthed) return;
-    loadData();
-  }, [isClient, isAuthed]);
-
-  function handleLogin() {
-    if (password === "1733") {
-      setIsAuthed(true);
-      localStorage.setItem("dance_auth", "true");
-      setPassword("");
-    } else {
-      alert("Неверный пароль");
-    }
-  }
-
   async function loadData() {
+    setLoading(true);
     try {
-      const daysRes = await databases.listDocuments('main', 'days', [Query.orderAsc('date')]);
-      const eventsRes = await databases.listDocuments('main', 'events');
+      const daysRes = await databases.listDocuments<DayDocument>(DATABASE_ID, DAYS_COLLECTION_ID, [
+        Query.orderAsc("date"),
+      ]);
+      const eventsRes = await databases.listDocuments<EventDocument>(DATABASE_ID, EVENTS_COLLECTION_ID);
 
-      const formatted: DayType[] = daysRes.documents.map((day: any) => ({
+      const events = eventsRes.documents.map((event) => ({
+        $id: event.$id,
+        title: event.title,
+        time: event.time,
+        place: event.place,
+        road: event.road,
+        team: event.team,
+        day_id: event.day_id,
+      }));
+
+      const formatted: DayType[] = daysRes.documents.map((day) => ({
         $id: day.$id,
         date: day.date,
         firstTeamName: day.first_team_name || "Я Воробушки",
         secondTeamName: day.second_team_name || "Лев и новенькие",
         boards: {
-          first: eventsRes.documents.filter((e: any) => e.day_id === day.$id && e.team === "first"),
-          second: eventsRes.documents.filter((e: any) => e.day_id === day.$id && e.team === "second"),
+          first: events.filter((event) => event.day_id === day.$id && event.team === "first"),
+          second: events.filter((event) => event.day_id === day.$id && event.team === "second"),
         },
       }));
 
       setDays(formatted);
+      setLoadError("");
     } catch (err) {
       console.error(err);
+      const message = err instanceof Error ? err.message : "Неизвестная ошибка";
+      setLoadError(`Не получилось загрузить даты из базы: ${message}`);
+    } finally {
+      setLoading(false);
     }
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function addDay() {
     const value = prompt("Введите дату:");
     if (!value) return;
 
-    const day = await databases.createDocument('main', 'days', ID.unique(), {
+    const day = await databases.createDocument<DayDocument>(DATABASE_ID, DAYS_COLLECTION_ID, ID.unique(), {
       date: value,
       first_team_name: "Я Воробушки",
       second_team_name: "Лев и новенькие",
@@ -113,7 +126,7 @@ export default function Page() {
     if (editingField === "firstTeamName") updateData.first_team_name = editValue;
     if (editingField === "secondTeamName") updateData.second_team_name = editValue;
 
-    await databases.updateDocument('main', 'days', editingDayId, updateData);
+    await databases.updateDocument(DATABASE_ID, DAYS_COLLECTION_ID, editingDayId, updateData);
 
     setEditingDayId(null);
     setEditingField(null);
@@ -121,7 +134,7 @@ export default function Page() {
   }
 
   async function addEvent(dayId: string, team: "first" | "second") {
-    await databases.createDocument('main', 'events', ID.unique(), {
+    await databases.createDocument(DATABASE_ID, EVENTS_COLLECTION_ID, ID.unique(), {
       title: "Новое выступление",
       time: "18:00",
       place: "",
@@ -133,7 +146,7 @@ export default function Page() {
   }
 
   async function deleteEvent(id: string) {
-    await databases.deleteDocument('main', 'events', id);
+    await databases.deleteDocument(DATABASE_ID, EVENTS_COLLECTION_ID, id);
     await loadData();
   }
 
@@ -149,7 +162,7 @@ export default function Page() {
 
   async function saveEdit() {
     if (!editingEvent) return;
-    await databases.updateDocument('main', 'events', editingEvent.$id, {
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, editingEvent.$id, {
       title: editForm.title,
       time: editForm.time,
       place: editForm.place,
@@ -162,13 +175,13 @@ export default function Page() {
   async function quickRoad(event: EventType) {
     const value = prompt("Время в пути:");
     if (!value) return;
-    await databases.updateDocument('main', 'events', event.$id, { road: value });
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, event.$id, { road: value });
     await loadData();
   }
 
   async function onDrop(dayId: string, team: "first" | "second") {
     if (!dragged) return;
-    await databases.updateDocument('main', 'events', dragged.event.$id, { day_id: dayId, team });
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, dragged.event.$id, { day_id: dayId, team });
     setDragged(null);
     await loadData();
   }
@@ -306,13 +319,14 @@ export default function Page() {
           }}
         >
           {editingDayId === day.$id && editingField === teamField ? (
-            <input
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={saveDayEdit}
-              onKeyDown={(e) => e.key === "Enter" && saveDayEdit()}
-              autoFocus
-              style={{ background: "transparent", border: "none", color: "white", fontSize: 23, fontWeight: 700 }}
+            <input 
+              type="text" 
+              value={editValue} 
+              onChange={(e) => setEditValue(e.target.value)} 
+              onBlur={saveDayEdit} 
+              onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} 
+              autoFocus 
+              style={{ background: "transparent", border: "none", color: "white", fontSize: 23, fontWeight: 700 }} 
             />
           ) : (
             teamName
@@ -370,6 +384,8 @@ export default function Page() {
     );
   }
 
+  if (loading) return <div style={{ padding: 50, textAlign: "center", fontSize: 18 }}>Загрузка...</div>;
+
   const selectedDay = days.find((day) => day.$id === selectedDayId);
 
   if (!selectedDay) return renderStartPage();
@@ -407,13 +423,14 @@ export default function Page() {
           }}
         >
           {editingDayId === selectedDay.$id && editingField === "date" ? (
-            <input
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={saveDayEdit}
-              onKeyDown={(e) => e.key === "Enter" && saveDayEdit()}
-              autoFocus
-              style={{ background: "transparent", border: "none", color: "white", fontSize: 32, fontWeight: 800 }}
+            <input 
+              type="text" 
+              value={editValue} 
+              onChange={(e) => setEditValue(e.target.value)} 
+              onBlur={saveDayEdit} 
+              onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} 
+              autoFocus 
+              style={{ background: "transparent", border: "none", color: "white", fontSize: 32, fontWeight: 800 }} 
             />
           ) : (
             selectedDay.date
