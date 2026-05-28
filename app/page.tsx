@@ -299,20 +299,7 @@ export default function Page() {
         onDrop={() => onDrop(day.$id, team)}
         style={{ minWidth: 0, background: "#fff", borderRadius: 20, padding: 18, border: "1px solid #e2e8f0", boxShadow: "0 10px 30px rgba(0,0,0,0.06)" }}
       >
-        <div 
-          onClick={() => startDayEdit(day.$id, teamField, teamName)} 
-          style={{ 
-            fontSize: "clamp(18px, 5vw, 22px)", 
-            fontWeight: 700, 
-            padding: "12px 18px", 
-            background: "#1e2937", 
-            color: "white", 
-            borderRadius: 14, 
-            marginBottom: 24, 
-            cursor: "pointer", 
-            overflowWrap: "anywhere" 
-          }}
-        >
+        <div onClick={() => startDayEdit(day.$id, teamField, teamName)} style={{ fontSize: "clamp(18px, 5vw, 22px)", fontWeight: 700, padding: "12px 18px", background: "#1e2937", color: "white", borderRadius: 14, marginBottom: 24, cursor: "pointer", overflowWrap: "anywhere" }}>
           {editingDayId === day.$id && editingField === teamField ? (
             <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ ...inputStyle, fontSize: "clamp(18px, 5vw, 22px)" }} />
           ) : (
@@ -340,20 +327,7 @@ export default function Page() {
               <button
                 key={day.$id}
                 onClick={() => setSelectedDayId(day.$id)}
-                style={{ 
-                  minHeight: 130, 
-                  padding: 18, 
-                  border: "1px solid #e2e8f0", 
-                  borderRadius: 18, 
-                  background: "#ffffff", 
-                  color: "#1e2937", 
-                  boxShadow: "0 10px 30px rgba(0,0,0,0.06)", 
-                  fontSize: 24, 
-                  fontWeight: 800, 
-                  cursor: "pointer", 
-                  textAlign: "center", 
-                  overflowWrap: "anywhere" 
-                }}
+                style={{ minHeight: 130, padding: 18, border: "1px solid #e2e8f0", borderRadius: 18, background: "#ffffff", color: "#1e2937", boxShadow: "0 10px 30px rgba(0,0,0,0.06)", fontSize: 24, fontWeight: 800, cursor: "pointer", textAlign: "center", overflowWrap: "anywhere" }}
               >
                 {day.date}
               </button>
@@ -361,18 +335,8 @@ export default function Page() {
 
             <button
               onClick={addDay}
-              style={{ 
-                minHeight: 130, 
-                padding: 18, 
-                border: "2px dashed #94a3b8", 
-                borderRadius: 18, 
-                background: "#ffffff", 
-                color: "#475569", 
-                boxShadow: "0 10px 30px rgba(0,0,0,0.04)", 
-                fontSize: 46, 
-                fontWeight: 500, 
-                cursor: "pointer" 
-              }}
+              style={{ minHeight: 130, padding: 18, border: "2px dashed #94a3b8", borderRadius: 18, background: "#ffffff", color: "#475569", boxShadow: "0 10px 30px rgba(0,0,0,0.04)", fontSize: 46, fontWeight: 500, cursor: "pointer" }}
+              aria-label="Добавить дату"
             >
               +
             </button>
@@ -414,22 +378,7 @@ export default function Page() {
         </div>
 
         <div style={{ marginBottom: 60 }}>
-          <div 
-            onClick={() => startDayEdit(selectedDay.$id, "date", selectedDay.date)} 
-            style={{ 
-              display: "inline-block", 
-              maxWidth: "100%", 
-              boxSizing: "border-box", 
-              background: "#1e2937", 
-              color: "white", 
-              borderRadius: 18, 
-              padding: "14px 24px", 
-              fontSize: "clamp(24px, 8vw, 32px)", 
-              fontWeight: 800, 
-              marginBottom: 24, 
-              cursor: "pointer" 
-            }}
-          >
+          <div onClick={() => startDayEdit(selectedDay.$id, "date", selectedDay.date)} style={{ display: "inline-block", maxWidth: "100%", boxSizing: "border-box", background: "#1e2937", color: "white", borderRadius: 18, padding: "14px 24px", fontSize: "clamp(24px, 8vw, 32px)", fontWeight: 800, marginBottom: 24, cursor: "pointer" }}>
             {editingDayId === selectedDay.$id && editingField === "date" ? (
               <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveDayEdit} onKeyDown={(e) => e.key === "Enter" && saveDayEdit()} autoFocus style={{ ...inputStyle, fontSize: "clamp(24px, 8vw, 32px)" }} />
             ) : (
