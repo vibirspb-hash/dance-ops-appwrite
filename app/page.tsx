@@ -39,7 +39,6 @@ const EVENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_EVENTS_COLLECTION_
 export default function Page() {
   const [days, setDays] = useState<DayType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
 
   const [dragged, setDragged] = useState<{ event: EventType; dayId: string } | null>(null);
@@ -54,10 +53,12 @@ export default function Page() {
   async function loadData() {
     setLoading(true);
     try {
-      const daysRes = await databases.listDocuments<DayDocument>(DATABASE_ID, DAYS_COLLECTION_ID, [Query.orderAsc("date")]);
-      const eventsRes = await databases.listDocuments<EventDocument>(DATABASE_ID, EVENTS_COLLECTION_ID);
+      const [daysRes, eventsRes] = await Promise.all([
+        databases.listDocuments<DayDocument>(DATABASE_ID, DAYS_COLLECTION_ID, [Query.orderAsc("date")]),
+        databases.listDocuments<EventDocument>(DATABASE_ID, EVENTS_COLLECTION_ID)
+      ]);
 
-      const events = eventsRes.documents.map((e) => ({
+      const events = eventsRes.documents.map(e => ({
         $id: e.$id,
         title: e.title,
         time: e.time,
@@ -67,21 +68,20 @@ export default function Page() {
         day_id: e.day_id,
       }));
 
-      const formatted: DayType[] = daysRes.documents.map((day) => ({
+      const formatted = daysRes.documents.map(day => ({
         $id: day.$id,
         date: day.date,
         firstTeamName: day.first_team_name || "Я Воробушки",
         secondTeamName: day.second_team_name || "Лев и новенькие",
         boards: {
-          first: events.filter((e) => e.day_id === day.$id && e.team === "first"),
-          second: events.filter((e) => e.day_id === day.$id && e.team === "second"),
+          first: events.filter(e => e.day_id === day.$id && e.team === "first"),
+          second: events.filter(e => e.day_id === day.$id && e.team === "second"),
         },
       }));
 
       setDays(formatted);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setLoadError("Ошибка загрузки данных");
     } finally {
       setLoading(false);
     }
@@ -90,9 +90,6 @@ export default function Page() {
   useEffect(() => {
     loadData();
   }, []);
-
-  // Остальные функции (addDay, saveDayEdit, addEvent, deleteEvent, startEdit, saveEdit, quickRoad, onDrop и т.д.)
-  // Я оставил их как в твоей последней рабочей версии. Если нужно — скажи, добавлю полностью.
 
   async function addDay() {
     const value = prompt("Введите дату:");
@@ -105,7 +102,83 @@ export default function Page() {
     await loadData();
   }
 
-  // ... (другие функции без изменений)
+  function startDayEdit(dayId: string, field: "date" | "firstTeamName" | "secondTeamName", value: string) {
+    setEditingDayId(dayId);
+    setEditingField(field);
+    setEditValue(value);
+  }
+
+  async function saveDayEdit() {
+    if (!editingDayId || !editingField) return;
+    const data: any = {};
+    if (editingField === "date") data.date = editValue;
+    else if (editingField === "firstTeamName") data.first_team_name = editValue;
+    else if (editingField === "secondTeamName") data.second_team_name = editValue;
+
+    await databases.updateDocument(DATABASE_ID, DAYS_COLLECTION_ID, editingDayId, data);
+    setEditingDayId(null);
+    setEditingField(null);
+    await loadData();
+  }
+
+  async function addEvent(dayId: string, team: "first" | "second") {
+    await databases.createDocument(DATABASE_ID, EVENTS_COLLECTION_ID, ID.unique(), {
+      title: "Новое выступление",
+      time: "18:00",
+      place: "",
+      road: "",
+      team,
+      day_id: dayId,
+    });
+    await loadData();
+  }
+
+  async function deleteEvent(id: string) {
+    if (!confirm("Удалить выступление?")) return;
+    await databases.deleteDocument(DATABASE_ID, EVENTS_COLLECTION_ID, id);
+    await loadData();
+  }
+
+  function startEdit(event: EventType) {
+    setEditingEvent(event);
+    setEditForm({
+      title: event.title,
+      time: event.time,
+      place: event.place || "",
+      road: event.road || "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editingEvent) return;
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, editingEvent.$id, {
+      title: editForm.title,
+      time: editForm.time,
+      place: editForm.place,
+      road: editForm.road,
+    });
+    setEditingEvent(null);
+    await loadData();
+  }
+
+  async function quickRoad(event: EventType) {
+    const value = prompt("Время в пути:", event.road || "");
+    if (value === null) return;
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, event.$id, { road: value });
+    await loadData();
+  }
+
+  async function onDrop(dayId: string, team: "first" | "second") {
+    if (!dragged) return;
+    await databases.updateDocument(DATABASE_ID, EVENTS_COLLECTION_ID, dragged.event.$id, {
+      day_id: dayId,
+      team
+    });
+    setDragged(null);
+    await loadData();
+  }
+
+  // ==================== RENDER ====================
 
   function renderEvent(event: EventType, dayId: string) {
     return (
@@ -114,14 +187,7 @@ export default function Page() {
           draggable
           onDragStart={() => setDragged({ event, dayId })}
           onClick={() => startEdit(event)}
-          style={{
-            padding: "18px 20px",
-            border: "1px solid #e0e7ff",
-            borderRadius: 16,
-            background: "#fff",
-            boxShadow: "0 4px 15px rgba(0,0,0,0.06)",
-            cursor: "grab"
-          }}
+          style={{ padding: "18px 20px", border: "1px solid #e0e7ff", borderRadius: 16, background: "#fff", boxShadow: "0 4px 15px rgba(0,0,0,0.06)", cursor: "grab" }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
             <div>
@@ -140,49 +206,58 @@ export default function Page() {
     );
   }
 
-  // ... renderColumn, renderStartPage и остальной код ...
+  // ... (остальные render функции можно добавить при необходимости)
+
+  if (loading) return <div style={{ padding: 50, textAlign: "center" }}>Загрузка...</div>;
+
+  const selectedDay = days.find(d => d.$id === selectedDayId);
+
+  if (!selectedDay) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <h1>Dance Ops</h1>
+        <button onClick={addDay} style={{ padding: 15, fontSize: 18 }}>Добавить дату</button>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: "20px 12px", background: "#f8fafc", minHeight: "100vh" }}>
-      {/* Твой основной интерфейс */}
-      {/* Кнопка Назад */}
-      <button 
-        onClick={() => setSelectedDayId(null)} 
-        style={{ 
-          padding: "12px 18px", 
-          background: "#1e2937", 
-          color: "white", 
-          border: "none", 
-          borderRadius: 14, 
-          fontSize: 18, 
-          fontWeight: 700 
-        }}
-      >
+    <div style={{ padding: 20, maxWidth: 1400, margin: "0 auto" }}>
+      <button onClick={() => setSelectedDayId(null)} style={{ background: "#1e2937", color: "white", padding: "12px 20px", borderRadius: 12, marginBottom: 20 }}>
         ← Даты
       </button>
 
-      {/* Модальное окно */}
-      {editingEvent && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "white", padding: 28, borderRadius: 20, width: "100%", maxWidth: 420 }}>
-            <h3>Редактировать выступление</h3>
-            {/* inputs ... */}
+      <h1 style={{ textAlign: "center", marginBottom: 30 }}>{selectedDay.date}</h1>
 
-            <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-              <button onClick={saveEdit} style={{ flex: 1, padding: 16, background: "#4f46e5", color: "white", border: "none", borderRadius: 12 }}>Сохранить</button>
-              <button 
-                onClick={() => setEditingEvent(null)} 
-                style={{ 
-                  flex: 1, 
-                  padding: 16, 
-                  background: "#1e2937", 
-                  color: "white", 
-                  border: "none", 
-                  borderRadius: 12 
-                }}
-              >
-                Отмена
-              </button>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        {/* first column */}
+        <div style={{ background: "#fff", padding: 20, borderRadius: 16 }}>
+          <h2>{selectedDay.firstTeamName}</h2>
+          {selectedDay.boards.first.map(e => renderEvent(e, selectedDay.$id))}
+          <button onClick={() => addEvent(selectedDay.$id, "first")}>+ Добавить</button>
+        </div>
+
+        {/* second column */}
+        <div style={{ background: "#fff", padding: 20, borderRadius: 16 }}>
+          <h2>{selectedDay.secondTeamName}</h2>
+          {selectedDay.boards.second.map(e => renderEvent(e, selectedDay.$id))}
+          <button onClick={() => addEvent(selectedDay.$id, "second")}>+ Добавить</button>
+        </div>
+      </div>
+
+      {/* Modal */}
+      {editingEvent && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "white", padding: 30, borderRadius: 16, width: "90%", maxWidth: 400 }}>
+            <h3>Редактировать</h3>
+            <input value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} placeholder="Название" style={{width:"100%", margin: "10px 0", padding: 10}} />
+            <input value={editForm.time} onChange={e => setEditForm({...editForm, time: e.target.value})} placeholder="Время" style={{width:"100%", margin: "10px 0", padding: 10}} />
+            <input value={editForm.place} onChange={e => setEditForm({...editForm, place: e.target.value})} placeholder="Место" style={{width:"100%", margin: "10px 0", padding: 10}} />
+            <input value={editForm.road} onChange={e => setEditForm({...editForm, road: e.target.value})} placeholder="Время в пути" style={{width:"100%", margin: "10px 0", padding: 10}} />
+
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+              <button onClick={saveEdit} style={{ flex: 1, padding: 14, background: "#4f46e5", color: "white", border: "none", borderRadius: 12 }}>Сохранить</button>
+              <button onClick={() => setEditingEvent(null)} style={{ flex: 1, padding: 14, background: "#1e2937", color: "white", border: "none", borderRadius: 12 }}>Отмена</button>
             </div>
           </div>
         </div>
