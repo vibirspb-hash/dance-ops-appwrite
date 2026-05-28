@@ -268,14 +268,7 @@ export default function Page() {
           draggable
           onDragStart={() => setDragged({ event, dayId })}
           onClick={() => startEdit(event)}
-          style={{
-            padding: "18px 20px",
-            border: "1px solid #e0e7ff",
-            borderRadius: 16,
-            background: "#fff",
-            boxShadow: "0 4px 15px rgba(0,0,0,0.06)",
-            cursor: "grab"
-          }}
+          style={{ padding: "18px 20px", border: "1px solid #e0e7ff", borderRadius: 16, background: "#fff", boxShadow: "0 4px 15px rgba(0,0,0,0.06)", cursor: "grab" }}
         >
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
             <div style={{ minWidth: 0 }}>
@@ -283,7 +276,6 @@ export default function Page() {
               <div style={{ fontSize: 18, fontWeight: 600, color: "#0f172a", overflowWrap: "anywhere" }}>{event.title}</div>
               {event.place && <div style={{ fontSize: 15, color: "#475569", marginTop: 8 }}>📍 {event.place}</div>}
             </div>
-
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={(e) => { e.stopPropagation(); quickRoad(event); }} style={{ fontSize: 22 }}>🚗</button>
               <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.$id); }} style={{ fontSize: 22 }}>🗑</button>
