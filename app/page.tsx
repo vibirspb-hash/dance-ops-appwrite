@@ -74,7 +74,7 @@ export default function Page() {
 
       setDays(formatted);
     } catch (err) {
-      console.error(err);
+      console.error("Ошибка загрузки:", err);
     } finally {
       setLoading(false);
     }
@@ -127,7 +127,7 @@ export default function Page() {
   }
 
   async function deleteEvent(id: string) {
-    if (!confirm("Удалить?")) return;
+    if (!confirm("Удалить выступление?")) return;
     await databases.deleteDocument(DATABASE_ID, EVENTS_COLLECTION_ID, id);
     await loadData();
   }
@@ -202,7 +202,10 @@ export default function Page() {
     return (
       <div style={{ padding: 40, textAlign: "center" }}>
         <h1 style={{ fontSize: 32, marginBottom: 30 }}>🎭 Dance Ops</h1>
-        <button onClick={addDay} style={{ padding: 16, fontSize: 18, background: "#1e2937", color: "white", border: "none", borderRadius: 12 }}>
+        <button 
+          onClick={addDay} 
+          style={{ padding: 16, fontSize: 18, background: "#1e2937", color: "white", border: "none", borderRadius: 12 }}
+        >
           + Добавить дату
         </button>
       </div>
