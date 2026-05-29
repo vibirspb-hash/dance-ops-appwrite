@@ -27,6 +27,8 @@ type DayType = {
   };
 };
 
+type EventDocument = Models.Document & Omit<EventType, "$id">;
+
 type DayDocument = Models.Document & {
   date: string;
   first_team_name?: string;
@@ -35,333 +37,141 @@ type DayDocument = Models.Document & {
 
 /* ================= ENV ================= */
 
-const DATABASE_ID =
-  process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID ?? "main";
+const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID ?? "";
+const DAYS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_DAYS_COLLECTION_ID ?? "";
+const EVENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_EVENTS_COLLECTION_ID ?? "";
 
-const DAYS_COLLECTION_ID =
-  process.env.NEXT_PUBLIC_APPWRITE_DAYS_COLLECTION_ID ?? "days";
-
-const EVENTS_COLLECTION_ID =
-  process.env.NEXT_PUBLIC_APPWRITE_EVENTS_COLLECTION_ID ?? "events";
-
-/* ================= STYLES ================= */
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  minWidth: 0,
-  background: "transparent",
-  border: "none",
-  color: "white",
-  fontWeight: 800,
-  outline: "none",
-};
-
-/* ================= PAGE ================= */
+/* ================= COMPONENT ================= */
 
 export default function Page() {
   const [days, setDays] = useState<DayType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [error, setError] = useState("");
+
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-
-  const [dragged, setDragged] =
-    useState<{ event: EventType; dayId: string } | null>(null);
-
-  const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
-
-  const [editingDayId, setEditingDayId] = useState<string | null>(null);
-  const [editingField, setEditingField] = useState<
-    "date" | "firstTeamName" | "secondTeamName" | null
-  >(null);
-
-  const [editValue, setEditValue] = useState("");
-
-  const [editForm, setEditForm] = useState({
-    title: "",
-    time: "",
-    place: "",
-    road: "",
-  });
 
   /* ================= LOAD DATA ================= */
 
   async function loadData() {
-    setLoading(true);
-    setLoadError("");
-
     try {
+      setLoading(true);
+      setError("");
+
+      if (!DATABASE_ID || !DAYS_COLLECTION_ID || !EVENTS_COLLECTION_ID) {
+        throw new Error("ENV variables missing");
+      }
+
       const daysRes = await databases.listDocuments<DayDocument>(
         DATABASE_ID,
         DAYS_COLLECTION_ID,
         [Query.orderAsc("date")]
       );
 
-      const eventsRes = await databases.listDocuments(
+      const eventsRes = await databases.listDocuments<EventDocument>(
         DATABASE_ID,
         EVENTS_COLLECTION_ID
       );
 
-      const events = eventsRes.documents as unknown as EventType[];
+      const events: EventType[] = eventsRes.documents.map((event) => ({
+        $id: event.$id,
+        title: event.title,
+        time: event.time,
+        place: event.place,
+        road: event.road,
+        team: event.team,
+        day_id: event.day_id,
+      }));
 
       const formatted: DayType[] = daysRes.documents.map((day) => ({
         $id: day.$id,
         date: day.date,
-        firstTeamName: day.first_team_name || "Я Воробушки",
-        secondTeamName: day.second_team_name || "Лев и новенькие",
+        firstTeamName: day.first_team_name || "Team A",
+        secondTeamName: day.second_team_name || "Team B",
         boards: {
-          first: events.filter(
-            (e) => e.day_id === day.$id && e.team === "first"
-          ),
-          second: events.filter(
-            (e) => e.day_id === day.$id && e.team === "second"
-          ),
+          first: events.filter((e) => e.day_id === day.$id && e.team === "first"),
+          second: events.filter((e) => e.day_id === day.$id && e.team === "second"),
         },
       }));
 
       setDays(formatted);
     } catch (err) {
-      console.error(err);
-      const message =
-        err instanceof Error ? err.message : "Неизвестная ошибка";
-      setLoadError(
-        `Не получилось загрузить даты из базы: ${message}`
-      );
+      console.error("LOAD ERROR:", err);
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
   }
 
+  /* ================= INIT ================= */
+
   useEffect(() => {
-    void loadData();
+    loadData();
   }, []);
-
-  /* ================= CRUD ================= */
-
-  async function addDay() {
-    const value = prompt("Введите дату:");
-    if (!value) return;
-
-    const day = await databases.createDocument(
-      DATABASE_ID,
-      DAYS_COLLECTION_ID,
-      ID.unique(),
-      {
-        date: value,
-        first_team_name: "Я Воробушки",
-        second_team_name: "Лев и новенькие",
-      }
-    );
-
-    await loadData();
-    setSelectedDayId(day.$id);
-  }
-
-  async function addEvent(dayId: string, team: "first" | "second") {
-    await databases.createDocument(
-      DATABASE_ID,
-      EVENTS_COLLECTION_ID,
-      ID.unique(),
-      {
-        title: "Новое выступление",
-        time: "18:00",
-        place: "",
-        road: "",
-        team,
-        day_id: dayId,
-      }
-    );
-
-    await loadData();
-  }
-
-  async function deleteEvent(id: string) {
-    await databases.deleteDocument(
-      DATABASE_ID,
-      EVENTS_COLLECTION_ID,
-      id
-    );
-
-    await loadData();
-  }
-
-  async function saveEdit() {
-    if (!editingEvent) return;
-
-    await databases.updateDocument(
-      DATABASE_ID,
-      EVENTS_COLLECTION_ID,
-      editingEvent.$id,
-      {
-        title: editForm.title,
-        time: editForm.time,
-        place: editForm.place,
-        road: editForm.road,
-      }
-    );
-
-    setEditingEvent(null);
-    await loadData();
-  }
-
-  async function onDrop(dayId: string, team: "first" | "second") {
-    if (!dragged) return;
-
-    await databases.updateDocument(
-      DATABASE_ID,
-      EVENTS_COLLECTION_ID,
-      dragged.event.$id,
-      { day_id: dayId, team }
-    );
-
-    setDragged(null);
-    await loadData();
-  }
-
-  /* ================= RENDER EVENT ================= */
-
-  function renderEvent(event: EventType, dayId: string) {
-    return (
-      <div key={event.$id} style={{ marginBottom: 16 }}>
-        <div
-          draggable
-          onDragStart={() => setDragged({ event, dayId })}
-          onClick={() => {
-            setEditingEvent(event);
-            setEditForm({
-              title: event.title,
-              time: event.time,
-              place: event.place || "",
-              road: event.road || "",
-            });
-          }}
-          style={{
-            padding: 18,
-            borderRadius: 16,
-            background: "#fff",
-            border: "1px solid #e0e7ff",
-            cursor: "grab",
-          }}
-        >
-          <div style={{ fontSize: 24, fontWeight: 800 }}>
-            {event.time}
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>
-            {event.title}
-          </div>
-
-          {event.place && (
-            <div style={{ fontSize: 14, color: "#475569" }}>
-              {event.place}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  /* ================= COLUMN ================= */
-
-  function renderColumn(day: DayType, team: "first" | "second") {
-    const items = day.boards[team];
-
-    const teamName =
-      team === "first"
-        ? day.firstTeamName
-        : day.secondTeamName;
-
-    return (
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={() => onDrop(day.$id, team)}
-        style={{
-          background: "#fff",
-          padding: 18,
-          borderRadius: 20,
-        }}
-      >
-        <h3>{teamName}</h3>
-
-        <button onClick={() => addEvent(day.$id, team)}>
-          + add
-        </button>
-
-        {items.map((e) => renderEvent(e, day.$id))}
-      </div>
-    );
-  }
 
   /* ================= UI ================= */
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        Загрузка...
+      </div>
+    );
+  }
 
-  const selectedDay = days.find(
-    (d) => d.$id === selectedDayId
-  );
+  if (error) {
+    return (
+      <div style={{ padding: 40, color: "red", textAlign: "center" }}>
+        Ошибка: {error}
+      </div>
+    );
+  }
+
+  const selectedDay = days.find((d) => d.$id === selectedDayId);
 
   if (!selectedDay) {
     return (
-      <div>
+      <div style={{ padding: 40 }}>
         <h1>Dance Ops</h1>
 
-        {days.map((d) => (
+        {days.map((day) => (
           <button
-            key={d.$id}
-            onClick={() => setSelectedDayId(d.$id)}
+            key={day.$id}
+            onClick={() => setSelectedDayId(day.$id)}
+            style={{
+              display: "block",
+              margin: "10px 0",
+              padding: 10,
+              border: "1px solid #ccc",
+            }}
           >
-            {d.date}
+            {day.date}
           </button>
         ))}
-
-        <button onClick={addDay}>+ Add day</button>
       </div>
     );
   }
 
   return (
     <div style={{ padding: 20 }}>
-      <button onClick={() => setSelectedDayId(null)}>
-        Back
-      </button>
+      <button onClick={() => setSelectedDayId(null)}>← Back</button>
 
-      <h1>{selectedDay.date}</h1>
+      <h2>{selectedDay.date}</h2>
 
       <div style={{ display: "flex", gap: 20 }}>
-        {renderColumn(selectedDay, "first")}
-        {renderColumn(selectedDay, "second")}
-      </div>
-
-      {editingEvent && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              padding: 20,
-              margin: "10% auto",
-              width: 300,
-            }}
-          >
-            <input
-              value={editForm.title}
-              onChange={(e) =>
-                setEditForm({
-                  ...editForm,
-                  title: e.target.value,
-                })
-              }
-            />
-
-            <button onClick={saveEdit}>
-              Save
-            </button>
-          </div>
+        <div>
+          <h3>{selectedDay.firstTeamName}</h3>
+          {selectedDay.boards.first.map((e) => (
+            <div key={e.$id}>{e.title}</div>
+          ))}
         </div>
-      )}
+
+        <div>
+          <h3>{selectedDay.secondTeamName}</h3>
+          {selectedDay.boards.second.map((e) => (
+            <div key={e.$id}>{e.title}</div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
