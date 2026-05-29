@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ID, Query, type Models } from "appwrite";
+import { ID, Query } from "appwrite";
 import { databases } from "../lib/appwrite";
-
-/* ================= TYPES ================= */
 
 type EventType = {
   $id: string;
@@ -27,148 +25,188 @@ type DayType = {
   };
 };
 
-type EventDocument = Models.Document & Omit<EventType, "$id">;
-
-type DayDocument = Models.Document & {
-  date: string;
-  first_team_name?: string;
-  second_team_name?: string;
-};
-
-/* ================= ENV ================= */
-
-const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID ?? "";
-const DAYS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_DAYS_COLLECTION_ID ?? "";
-const EVENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_EVENTS_COLLECTION_ID ?? "";
-
-/* ================= COMPONENT ================= */
+const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
+const DAYS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_DAYS_COLLECTION_ID!;
+const EVENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_EVENTS_COLLECTION_ID!;
 
 export default function Page() {
   const [days, setDays] = useState<DayType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-
-  /* ================= LOAD DATA ================= */
 
   async function loadData() {
     try {
       setLoading(true);
-      setError("");
 
-      if (!DATABASE_ID || !DAYS_COLLECTION_ID || !EVENTS_COLLECTION_ID) {
-        throw new Error("ENV variables missing");
-      }
-
-      const daysRes = await databases.listDocuments<DayDocument>(
+      const daysRes = await databases.listDocuments(
         DATABASE_ID,
         DAYS_COLLECTION_ID,
         [Query.orderAsc("date")]
       );
 
-      const eventsRes = await databases.listDocuments<EventDocument>(
+      const eventsRes = await databases.listDocuments(
         DATABASE_ID,
         EVENTS_COLLECTION_ID
       );
 
-      const events: EventType[] = eventsRes.documents.map((event) => ({
-        $id: event.$id,
-        title: event.title,
-        time: event.time,
-        place: event.place,
-        road: event.road,
-        team: event.team,
-        day_id: event.day_id,
+      const events: EventType[] = eventsRes.documents.map((e: any) => ({
+        $id: e.$id,
+        title: e.title ?? "",
+        time: e.time ?? "",
+        place: e.place ?? "",
+        road: e.road ?? "",
+        team: e.team,
+        day_id: e.day_id,
       }));
 
-      const formatted: DayType[] = daysRes.documents.map((day) => ({
-        $id: day.$id,
-        date: day.date,
-        firstTeamName: day.first_team_name || "Team A",
-        secondTeamName: day.second_team_name || "Team B",
+      const formatted: DayType[] = daysRes.documents.map((d: any) => ({
+        $id: d.$id,
+        date: d.date ?? "No date",
+        firstTeamName: d.first_team_name ?? "Team A",
+        secondTeamName: d.second_team_name ?? "Team B",
         boards: {
-          first: events.filter((e) => e.day_id === day.$id && e.team === "first"),
-          second: events.filter((e) => e.day_id === day.$id && e.team === "second"),
+          first: events.filter(
+            (e) => e.day_id === d.$id && e.team === "first"
+          ),
+          second: events.filter(
+            (e) => e.day_id === d.$id && e.team === "second"
+          ),
         },
       }));
 
       setDays(formatted);
     } catch (err) {
-      console.error("LOAD ERROR:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
+      console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
-  /* ================= INIT ================= */
-
   useEffect(() => {
     loadData();
   }, []);
 
-  /* ================= UI ================= */
+  async function addDay() {
+    const value = prompt("Введите дату");
+    if (!value) return;
 
-  if (loading) {
-    return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        Загрузка...
-      </div>
+    await databases.createDocument(
+      DATABASE_ID,
+      DAYS_COLLECTION_ID,
+      ID.unique(),
+      {
+        date: value,
+        first_team_name: "Team A",
+        second_team_name: "Team B",
+      }
     );
+
+    await loadData();
   }
 
-  if (error) {
-    return (
-      <div style={{ padding: 40, color: "red", textAlign: "center" }}>
-        Ошибка: {error}
-      </div>
+  async function addEvent(dayId: string, team: "first" | "second") {
+    await databases.createDocument(
+      DATABASE_ID,
+      EVENTS_COLLECTION_ID,
+      ID.unique(),
+      {
+        title: "New event",
+        time: "18:00",
+        place: "",
+        road: "",
+        team,
+        day_id: dayId,
+      }
     );
+
+    await loadData();
+  }
+
+  async function deleteEvent(id: string) {
+    await databases.deleteDocument(DATABASE_ID, EVENTS_COLLECTION_ID, id);
+    await loadData();
   }
 
   const selectedDay = days.find((d) => d.$id === selectedDayId);
 
+  if (loading) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        Loading...
+      </div>
+    );
+  }
+
   if (!selectedDay) {
     return (
-      <div style={{ padding: 40 }}>
+      <div style={{ padding: 20, fontFamily: "sans-serif" }}>
         <h1>Dance Ops</h1>
 
-        {days.map((day) => (
-          <button
-            key={day.$id}
-            onClick={() => setSelectedDayId(day.$id)}
-            style={{
-              display: "block",
-              margin: "10px 0",
-              padding: 10,
-              border: "1px solid #ccc",
-            }}
-          >
-            {day.date}
-          </button>
-        ))}
+        <button onClick={addDay} style={{ marginBottom: 20 }}>
+          + Add day
+        </button>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {days.map((d) => (
+            <button
+              key={d.$id}
+              onClick={() => setSelectedDayId(d.$id)}
+              style={{
+                padding: 20,
+                border: "1px solid #ddd",
+                borderRadius: 10,
+              }}
+            >
+              {d.date}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <button onClick={() => setSelectedDayId(null)}>← Back</button>
+    <div style={{ padding: 20, fontFamily: "sans-serif" }}>
+      <button onClick={() => setSelectedDayId(null)}>
+        ← Back
+      </button>
 
       <h2>{selectedDay.date}</h2>
 
       <div style={{ display: "flex", gap: 20 }}>
-        <div>
+        <div style={{ flex: 1 }}>
           <h3>{selectedDay.firstTeamName}</h3>
+
+          <button onClick={() => addEvent(selectedDay.$id, "first")}>
+            + Add
+          </button>
+
           {selectedDay.boards.first.map((e) => (
-            <div key={e.$id}>{e.title}</div>
+            <div
+              key={e.$id}
+              style={{ border: "1px solid #ddd", marginTop: 10, padding: 10 }}
+            >
+              <b>{e.time}</b> {e.title}
+              <button onClick={() => deleteEvent(e.$id)}>Delete</button>
+            </div>
           ))}
         </div>
 
-        <div>
+        <div style={{ flex: 1 }}>
           <h3>{selectedDay.secondTeamName}</h3>
+
+          <button onClick={() => addEvent(selectedDay.$id, "second")}>
+            + Add
+          </button>
+
           {selectedDay.boards.second.map((e) => (
-            <div key={e.$id}>{e.title}</div>
+            <div
+              key={e.$id}
+              style={{ border: "1px solid #ddd", marginTop: 10, padding: 10 }}
+            >
+              <b>{e.time}</b> {e.title}
+              <button onClick={() => deleteEvent(e.$id)}>Delete</button>
+            </div>
           ))}
         </div>
       </div>
