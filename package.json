@@ -1,5 +1,5 @@
 {
-  "name": "dance-ops",
+  "name": "dance-ops-appwrite",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,15 +8,15 @@
     "start": "next start"
   },
   "dependencies": {
-    "appwrite": "^25.2.0",
-    "next": "14.2.5",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "next": "^16.2.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "appwrite": "^15.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18"
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
   }
 }
