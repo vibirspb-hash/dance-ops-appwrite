@@ -99,14 +99,14 @@ export default function Page() {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0f172a" }}>
         <div style={{ background: "#1e2937", padding: 40, borderRadius: 20, width: 360, textAlign: "center" }}>
-          <h1 style={{ color: "white", fontSize: 32 }}>Dance Ops</h1>
+          <h1 style={{ color: "white", fontSize: 32, marginBottom: 30 }}>Dance Ops</h1>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-            placeholder="Пароль"
-            style={{ width: "100%", padding: 16, fontSize: 18, margin: "20px 0", borderRadius: 12, border: "none" }}
+            placeholder="Введите пароль"
+            style={{ width: "100%", padding: 16, fontSize: 18, marginBottom: 20, borderRadius: 12, border: "none" }}
           />
           <button onClick={handleLogin} style={{ width: "100%", padding: 16, background: "#4f46e5", color: "white", border: "none", borderRadius: 12, fontSize: 18 }}>
             Войти
@@ -118,7 +118,11 @@ export default function Page() {
 
   if (loading) return <div style={{ padding: 50, textAlign: "center" }}>Загрузка...</div>;
 
-  // ... (остальной код с renderEvent, колонками и т.д.)
-
-  return <div style={{ padding: 40, textAlign: "center" }}>Приложение работает! (Appwrite подключён)</div>;
+  return (
+    <div style={{ padding: 40, textAlign: "center" }}>
+      <h1>🎭 Dance Ops</h1>
+      <p>Приложение успешно работает!</p>
+      <button onClick={loadData} style={{ padding: 12, marginTop: 20 }}>Перезагрузить данные</button>
+    </div>
+  );
 }
