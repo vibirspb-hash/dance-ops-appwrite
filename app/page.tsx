@@ -237,4 +237,3 @@ await loadData();  }  async function addEvent(dayId: string, team: "first" | "se
 </div>  )}</div>  );
 }
 
-но когда ты вносишь правки с цветаими все ломается 
