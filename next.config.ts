@@ -1,9 +1,8 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: 'standalone',
-  webpack: (config) => {
-    return config;
-  },
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  output: "export",
+  images: { unoptimized: true }
 };
 
 export default nextConfig;
